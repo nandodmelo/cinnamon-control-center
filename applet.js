@@ -196,15 +196,32 @@ function smallTile(iconName, title, onClick) {
     return tile;
 }
 
-function cardHeader(text, iconName, onClick) {
+/* Cabeçalho de cartão: título clicável (com seta) + ícone de atalho à direita */
+function cardHeader(text, iconName, onIconClick, onTitleClick) {
     let row = new St.BoxLayout({ style_class: 'cc-card-header' });
-    row.add(new St.Label({ text: text, style_class: 'cc-title' }), { expand: true, y_fill: false, y_align: St.Align.MIDDLE });
-    if (iconName) {
-        let b = new St.Button({ style_class: 'cc-mini-button', child: icon(iconName, 'cc-mini-icon') });
-        b.connect('clicked', onClick);
-        row.add(b, { x_fill: false, y_fill: false, y_align: St.Align.MIDDLE });
-    }
-    return row;
+    let titleBox = new St.BoxLayout({ style_class: 'cc-header-title' });
+    titleBox.add(new St.Label({ text: text, style_class: 'cc-title' }), { y_fill: false, y_align: St.Align.MIDDLE });
+    let chevron = icon('pan-down-symbolic', 'cc-chevron');
+    titleBox.add(chevron, { y_fill: false, y_align: St.Align.MIDDLE });
+    let titleBtn = new St.Button({ child: titleBox, style_class: 'cc-header-button' });
+    titleBtn.connect('clicked', onTitleClick);
+    row.add(titleBtn, { expand: true, x_fill: false, x_align: St.Align.START, y_fill: false, y_align: St.Align.MIDDLE });
+    let b = new St.Button({ style_class: 'cc-mini-button', child: icon(iconName, 'cc-mini-icon') });
+    b.connect('clicked', onIconClick);
+    row.add(b, { x_fill: false, y_fill: false, y_align: St.Align.MIDDLE });
+    return { actor: row, chevron: chevron };
+}
+
+/* Item de lista com marca de seleção (saídas de áudio) */
+function listItem(text, selected, onClick) {
+    let row = new St.BoxLayout({ style_class: 'cc-list-row' });
+    let check = icon('object-select-symbolic', 'cc-check');
+    check.opacity = selected ? 255 : 0;
+    row.add(check, { x_fill: false, y_fill: false, y_align: St.Align.MIDDLE });
+    row.add(label(text, 'cc-list-label'), { expand: true, y_fill: false, y_align: St.Align.MIDDLE });
+    let b = new St.Button({ style_class: 'cc-list-item', child: row, x_fill: true });
+    b.connect('clicked', onClick);
+    return b;
 }
 
 /* ===================================================================== */
@@ -276,19 +293,29 @@ class ControlCenterApplet extends Applet.IconApplet {
 
         // Tela
         let display = new St.BoxLayout({ vertical: true, style_class: 'cc-card cc-wide' });
-        display.add_child(cardHeader('Tela', 'video-display-symbolic', () => this._launch(['cinnamon-settings', 'display'])));
+        this._displayHeader = cardHeader('Tela', 'video-display-symbolic',
+            () => this._launch(['cinnamon-settings', 'display']), () => this._toggleExpand('display'));
+        display.add_child(this._displayHeader.actor);
         this._brightSlider = new PillSlider('display-brightness-symbolic');
         display.add_child(this._brightSlider.actor);
         this._brightHint = label('', 'cc-hint');
         this._brightHint.hide();
         display.add_child(this._brightHint);
+        this._displaysBox = new St.BoxLayout({ vertical: true, style_class: 'cc-expand' });
+        this._displaysBox.hide();
+        display.add_child(this._displaysBox);
         this._root.add_child(display);
 
         // Som
         let sound = new St.BoxLayout({ vertical: true, style_class: 'cc-card cc-wide' });
-        sound.add_child(cardHeader('Som', 'audio-speakers-symbolic', () => this._launch(['cinnamon-settings', 'sound'])));
+        this._soundHeader = cardHeader('Som', 'audio-speakers-symbolic',
+            () => this._launch(['cinnamon-settings', 'sound']), () => this._toggleExpand('sound'));
+        sound.add_child(this._soundHeader.actor);
         this._volSlider = new PillSlider('audio-volume-high-symbolic');
         sound.add_child(this._volSlider.actor);
+        this._outputsBox = new St.BoxLayout({ vertical: true, style_class: 'cc-expand' });
+        this._outputsBox.hide();
+        sound.add_child(this._outputsBox);
         this._root.add_child(sound);
 
         // Tocando agora
@@ -309,8 +336,13 @@ class ControlCenterApplet extends Applet.IconApplet {
         this._prevBtn = mbtn('media-skip-backward-symbolic', 'Previous');
         this._playBtn = mbtn('media-playback-start-symbolic', 'PlayPause');
         this._nextBtn = mbtn('media-skip-forward-symbolic', 'Next');
-        media.add(this._art, { x_fill: false, y_fill: false, y_align: St.Align.MIDDLE });
-        media.add(mtexts, { expand: true, y_fill: false, y_align: St.Align.MIDDLE });
+        // Capa + textos formam um botão que traz o player para a frente
+        let info = new St.BoxLayout({ style_class: 'cc-media-info-box' });
+        info.add(this._art, { x_fill: false, y_fill: false, y_align: St.Align.MIDDLE });
+        info.add(mtexts, { expand: true, y_fill: false, y_align: St.Align.MIDDLE });
+        this._mediaInfo = new St.Button({ style_class: 'cc-media-info', child: info, x_fill: true });
+        this._mediaInfo.connect('clicked', () => this._raisePlayer());
+        media.add(this._mediaInfo, { expand: true, x_fill: true, y_fill: false, y_align: St.Align.MIDDLE });
         media.add(ctrls, { y_fill: false, y_align: St.Align.MIDDLE });
         this._root.add_child(media);
     }
@@ -325,8 +357,147 @@ class ControlCenterApplet extends Applet.IconApplet {
     }
 
     _onOpen() {
+        this._collapse();
         this._refreshBrightness();
         this._refreshBluetooth();
+    }
+
+    /* ---------------- Seções expansíveis (Tela / Som) ---------------- */
+    _toggleExpand(which) {
+        let open = this._expanded === which ? null : which;
+        this._collapse();
+        if (!open) return;
+        this._expanded = open;
+        if (open === 'display') {
+            this._displayHeader.chevron.icon_name = 'pan-up-symbolic';
+            this._displaysBox.show();
+            this._loadDisplays();
+        } else {
+            this._soundHeader.chevron.icon_name = 'pan-up-symbolic';
+            this._outputsBox.show();
+            this._renderOutputs();
+        }
+    }
+
+    _collapse() {
+        this._expanded = null;
+        this._displaysBox.hide();
+        this._outputsBox.hide();
+        this._displayHeader.chevron.icon_name = 'pan-down-symbolic';
+        this._soundHeader.chevron.icon_name = 'pan-down-symbolic';
+    }
+
+    /* ---------------- Taxa de atualização (Muffin DisplayConfig) ---------------- */
+    _displayCall(method, params, cb) {
+        Gio.DBus.session.call('org.cinnamon.Muffin.DisplayConfig', '/org/cinnamon/Muffin/DisplayConfig',
+            'org.cinnamon.Muffin.DisplayConfig', method, params, null, Gio.DBusCallFlags.NONE, -1, null,
+            (c, res) => {
+                let out = null, err = null;
+                try { out = c.call_finish(res); } catch (e) { err = e; }
+                cb(out, err);
+            });
+    }
+
+    _loadDisplays() {
+        this._displayCall('GetCurrentState', null, (out, err) => {
+            if (err) {
+                this._displayState = null;
+                this._renderDisplays('Não foi possível ler os monitores.');
+                return;
+            }
+            this._displayState = out.recursiveUnpack();
+            this._renderDisplays();
+        });
+    }
+
+    // Uma opção por taxa arredondada (ex.: 60 e 59,94 viram "60 Hz"), só para a resolução atual
+    _rateOptions(modes, current) {
+        let byRate = new Map();
+        for (let m of modes) {
+            if (m[1] !== current[1] || m[2] !== current[2]) continue;
+            let r = Math.round(m[3]);
+            if (r < 48 && m !== current) continue;
+            let prev = byRate.get(r);
+            if (!prev || m === current || (prev !== current && m[3] > prev[3])) byRate.set(r, m);
+        }
+        return [...byRate.entries()].sort((a, b) => b[0] - a[0]);
+    }
+
+    _renderDisplays(error) {
+        this._displaysBox.destroy_all_children();
+        if (error || !this._displayState) {
+            this._displaysBox.add_child(label(error || '', 'cc-hint'));
+            return;
+        }
+        let [, monitors, logicals] = this._displayState;
+        for (let lm of logicals) {
+            for (let spec of lm[5]) {
+                let mon = monitors.find(m => m[0][0] === spec[0]);
+                if (!mon) continue;
+                let current = mon[1].find(m => m[6]['is-current']);
+                if (!current) continue;
+                let name = mon[2]['display-name'] || spec[0];
+                let block = new St.BoxLayout({ vertical: true, style_class: 'cc-display-block' });
+                block.add_child(label(name, 'cc-list-title'));
+                block.add_child(label(`${current[1]} × ${current[2]} · ${current[3].toFixed(2).replace('.', ',')} Hz`, 'cc-subtitle'));
+                let pills = new St.BoxLayout({ style_class: 'cc-pills' });
+                for (let [r, mode] of this._rateOptions(mon[1], current)) {
+                    let p = new St.Button({ style_class: 'cc-pill', label: `${r} Hz` });
+                    if (mode === current) p.add_style_pseudo_class('checked');
+                    else p.connect('clicked', () => this._applyMode(spec[0], mode[0]));
+                    pills.add_child(p);
+                }
+                block.add_child(pills);
+                this._displaysBox.add_child(block);
+            }
+        }
+        if (!this._displaysBox.get_n_children())
+            this._displaysBox.add_child(label('Nenhum monitor ativo encontrado.', 'cc-hint'));
+    }
+
+    _applyMode(connector, modeId) {
+        let [serial, monitors, logicals, props] = this._displayState;
+        let curMode = (conn) => {
+            let mon = monitors.find(m => m[0][0] === conn);
+            let cur = mon && mon[1].find(m => m[6]['is-current']);
+            return cur ? cur[0] : '';
+        };
+        let lms = logicals.map(lm => [lm[0], lm[1], lm[2], lm[3], lm[4],
+            lm[5].map(spec => [spec[0], spec[0] === connector ? modeId : curMode(spec[0]), {}])]);
+        let p = {};
+        if (props['supports-changing-layout-mode'] && props['layout-mode'] !== undefined)
+            p['layout-mode'] = new GLib.Variant('u', props['layout-mode']);
+        if (props['legacy-ui-scaling-factor'] !== undefined)
+            p['legacy-ui-scaling-factor'] = new GLib.Variant('i', props['legacy-ui-scaling-factor']);
+        // método 2 = persistente; o Cinnamon pede confirmação e reverte sozinho se não for confirmada
+        let params = new GLib.Variant('(uua(iiduba(ssa{sv}))a{sv})', [serial, 2, lms, p]);
+        this.menu.close();
+        this._displayCall('ApplyMonitorsConfig', params, (out, err) => {
+            if (err) global.logError('[controlcenter] ApplyMonitorsConfig: ' + err.message);
+        });
+    }
+
+    /* ---------------- Saídas de áudio ---------------- */
+    _renderOutputs() {
+        if (!this._outputsBox.visible) return;
+        this._outputsBox.destroy_all_children();
+        if (!this._mixer || this._mixer.get_state() !== Cvc.MixerControlState.READY) return;
+        let def = this._mixer.get_default_sink();
+        let sinks = this._mixer.get_sinks();
+        for (let s of sinks) {
+            this._outputsBox.add(listItem(s.get_description() || s.get_name(), def && s.id === def.id,
+                () => this._mixer.set_default_sink(s)), { x_fill: true });
+        }
+        if (!sinks.length) this._outputsBox.add_child(label('Nenhuma saída de áudio encontrada.', 'cc-hint'));
+    }
+
+    /* ---------------- Trazer o player para a frente ---------------- */
+    _raisePlayer() {
+        let p = this._currentPlayer();
+        if (!p) return;
+        this.menu.close();
+        Gio.DBus.session.call(p.name, '/org/mpris/MediaPlayer2', 'org.mpris.MediaPlayer2', 'Raise',
+            null, null, Gio.DBusCallFlags.NONE, -1, null, null);
     }
 
     /* ------------- GSettings: Não Perturbe, Luz Noturna, Modo Escuro ------------- */
@@ -504,7 +675,9 @@ class ControlCenterApplet extends Applet.IconApplet {
     _initSound() {
         this._mixer = new Cvc.MixerControl({ name: 'Central de Controle' });
         this._connect(this._mixer, 'state-changed', () => this._onMixerState());
-        this._connect(this._mixer, 'default-sink-changed', () => this._onMixerState());
+        this._connect(this._mixer, 'default-sink-changed', () => { this._onMixerState(); this._renderOutputs(); });
+        this._connect(this._mixer, 'stream-added', () => this._renderOutputs());
+        this._connect(this._mixer, 'stream-removed', () => this._renderOutputs());
         this._mixer.open();
 
         this._volSlider.connect('value-changed', (s, v) => this._setVolume(v));
@@ -630,7 +803,7 @@ class ControlCenterApplet extends Applet.IconApplet {
                 try { proxy = Gio.DBusProxy.new_for_bus_finish(res); } catch (e) { return; }
                 this._removePlayer(name);
                 let id = proxy.connect('g-properties-changed', () => this._updateMedia());
-                this._players.set(name, { proxy, id, order: ++this._playerOrder });
+                this._players.set(name, { name, proxy, id, order: ++this._playerOrder });
                 this._updateMedia();
             });
     }

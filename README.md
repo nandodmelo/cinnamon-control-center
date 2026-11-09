@@ -12,9 +12,9 @@ Applet para o painel do **Linux Mint / Cinnamon** inspirado no Control Center do
 - **Não Perturbe** – silencia as notificações do Cinnamon
 - **Luz Noturna** – ativa na hora, mesmo fora do horário agendado
 - **Modo Escuro** – alterna tema GTK, ícones e tema do Cinnamon entre as variantes *Dark* e *Light* (ex.: WhiteSur)
-- **Tela** – brilho do monitor externo via DDC/CI (`ddcutil`)
-- **Som** – volume da saída padrão (PulseAudio/PipeWire), com rolagem do mouse
-- **Tocando agora** – capa, título e controles de qualquer player MPRIS (Spotify, YouTube no navegador, VLC…)
+- **Tela** – brilho do monitor externo via DDC/CI (`ddcutil`); clicando no título, troca a taxa de atualização (60/120/240 Hz…) de cada monitor
+- **Som** – volume da saída padrão (PulseAudio/PipeWire), com rolagem do mouse; clicando no título, escolhe a saída de áudio
+- **Tocando agora** – capa, título e controles de qualquer player MPRIS (Spotify, YouTube no navegador, VLC…); clicar na música traz o player para a frente
 
 O visual segue automaticamente o tema claro/escuro.
 
