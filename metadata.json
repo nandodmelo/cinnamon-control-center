@@ -1,0 +1,7 @@
+{
+  "uuid": "controlcenter@fernando",
+  "name": "Central de Controle",
+  "description": "Central de Controle no estilo macOS: rede, Bluetooth, Não Perturbe, luz noturna, modo escuro, brilho, volume e mídia.",
+  "max-instances": 1,
+  "version": "1.0"
+}

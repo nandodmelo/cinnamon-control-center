@@ -1,0 +1,141 @@
+/* ===== Central de Controle — estilo macOS Big Sur ===== */
+
+/* Janela do popup */
+.menu.cc-menu {
+    background-color: rgba(38, 38, 40, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.menu.cc-menu.cc-menu-light {
+    background-color: rgba(236, 236, 238, 0.96);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+.cc-menu .popup-menu-content {
+    padding: 0;
+    margin: 0;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+.cc-root { width: 320px; spacing: 10px; }
+.cc-grid { spacing: 10px; }
+.cc-col  { spacing: 10px; }
+
+/* Cartões */
+.cc-card {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 10px;
+}
+.cc-light .cc-card {
+    background-color: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+}
+.cc-net   { width: 156px; spacing: 14px; }
+.cc-small { padding: 9px 4px 7px 4px; transition-duration: 120; }
+.cc-small:hover { background-color: rgba(255, 255, 255, 0.13); }
+.cc-light .cc-small:hover { background-color: rgba(255, 255, 255, 0.95); }
+
+/* Linhas com círculo + texto */
+.cc-row      { spacing: 8px; }
+.cc-row-text { padding: 0; }
+
+.cc-title {
+    font-size: 9.5pt;
+    font-weight: bold;
+    color: #f2f2f7;
+}
+.cc-subtitle {
+    font-size: 8pt;
+    color: rgba(235, 235, 245, 0.58);
+}
+.cc-hint {
+    font-size: 8pt;
+    padding-top: 7px;
+    color: rgba(235, 235, 245, 0.5);
+}
+.cc-small-label {
+    font-size: 8pt;
+    padding-top: 6px;
+    text-align: center;
+    color: #f2f2f7;
+}
+.cc-light .cc-title,
+.cc-light .cc-small-label { color: #1d1d1f; }
+.cc-light .cc-subtitle,
+.cc-light .cc-hint { color: rgba(60, 60, 67, 0.62); }
+
+/* Botões redondos */
+.cc-circle {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    max-width: 28px;
+    max-height: 28px;
+    border-radius: 14px;
+    background-color: rgba(255, 255, 255, 0.16);
+    transition-duration: 120;
+}
+.cc-circle:hover   { background-color: rgba(255, 255, 255, 0.26); }
+.cc-circle:checked { background-color: #0a84ff; }
+.cc-circle:checked:hover { background-color: #3d9bff; }
+.cc-circle-icon { icon-size: 15px; color: #ffffff; }
+
+.cc-light .cc-circle       { background-color: rgba(0, 0, 0, 0.09); }
+.cc-light .cc-circle:hover { background-color: rgba(0, 0, 0, 0.15); }
+.cc-light .cc-circle:checked { background-color: #007aff; }
+.cc-light .cc-circle-icon  { color: #3a3a3c; }
+.cc-light .cc-circle:checked .cc-circle-icon { color: #ffffff; }
+
+/* Cabeçalho dos cartões largos */
+.cc-card-header { padding-bottom: 8px; }
+.cc-mini-button { border-radius: 10px; padding: 2px; }
+.cc-mini-button:hover { background-color: rgba(255, 255, 255, 0.14); }
+.cc-light .cc-mini-button:hover { background-color: rgba(0, 0, 0, 0.08); }
+.cc-mini-icon { icon-size: 14px; color: rgba(235, 235, 245, 0.62); }
+.cc-light .cc-mini-icon { color: rgba(60, 60, 67, 0.62); }
+
+/* Slider em pílula */
+.cc-slider { height: 24px; }
+.cc-slider-area {
+    -cc-track-color: rgba(255, 255, 255, 0.13);
+    -cc-fill-color: #ececf0;
+    -cc-knob-color: #ffffff;
+    -cc-knob-border-color: rgba(0, 0, 0, 0.18);
+}
+.cc-light .cc-slider-area {
+    -cc-track-color: rgba(0, 0, 0, 0.09);
+    -cc-fill-color: #ffffff;
+    -cc-knob-color: #ffffff;
+    -cc-knob-border-color: rgba(0, 0, 0, 0.2);
+}
+.cc-slider-icon {
+    icon-size: 13px;
+    padding-left: 6px;
+    color: #6e6e73;
+}
+
+/* Tocando agora */
+.cc-media { spacing: 10px; }
+.cc-art {
+    icon-size: 20px;
+    padding: 10px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.12);
+    color: rgba(235, 235, 245, 0.7);
+}
+.cc-light .cc-art { background-color: rgba(0, 0, 0, 0.07); color: #6e6e73; }
+.cc-art.cc-art-image { icon-size: 40px; padding: 0; background-color: transparent; }
+
+.cc-media-ctrls  { spacing: 2px; }
+.cc-media-button { padding: 5px; border-radius: 8px; }
+.cc-media-button:hover { background-color: rgba(255, 255, 255, 0.12); }
+.cc-light .cc-media-button:hover { background-color: rgba(0, 0, 0, 0.07); }
+.cc-media-icon { icon-size: 16px; color: #f2f2f7; }
+.cc-light .cc-media-icon { color: #1d1d1f; }
