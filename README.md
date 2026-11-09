@@ -9,7 +9,7 @@ Applet para o painel do **Linux Mint / Cinnamon** inspirado no Control Center do
 - **Wi‑Fi** – liga/desliga o rádio e mostra a rede conectada
 - **Bluetooth** – liga/desliga o adaptador e mostra os dispositivos conectados (BlueZ via D‑Bus)
 - **Rede** – status da conexão cabeada/primária (NetworkManager)
-- **Baterias** – anéis com a carga do mouse e do fone sem fio (passe o mouse para ver a %)
+- **Baterias** – anéis com a carga do mouse e do fone sem fio (passe o mouse para ver a %); um raio verde indica que está carregando
 - **Luz Noturna** – ativa na hora, mesmo fora do horário agendado
 - **Modo Escuro** – alterna tema GTK, ícones e tema do Cinnamon entre as variantes *Dark* e *Light* (ex.: WhiteSur)
 - **Tela** – brilho do monitor externo via DDC/CI (`ddcutil`); clicando no título, troca a taxa de atualização (60/120/240 Hz…) e a escala (100%–200%) de cada monitor

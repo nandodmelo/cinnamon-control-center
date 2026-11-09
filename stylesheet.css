@@ -214,12 +214,14 @@
     -cc-ring-ok:  #30d158;
     -cc-ring-mid: #ff9f0a;
     -cc-ring-low: #ff453a;
+    -cc-ring-bolt: rgba(48, 209, 88, 0.88);
 }
 .cc-light .cc-ring-area {
     -cc-ring-track: rgba(0, 0, 0, 0.1);
     -cc-ring-ok:  #28cd41;
     -cc-ring-mid: #ff9500;
     -cc-ring-low: #ff3b30;
+    -cc-ring-bolt: rgba(40, 205, 65, 0.88);
 }
 .cc-ring-icon { icon-size: 1.8em; color: #f2f2f7; }
 .cc-light .cc-ring-icon { color: #3a3a3c; }

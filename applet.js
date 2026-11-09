@@ -207,11 +207,15 @@ function batteryItem(iconName, name) {
     let ring = new St.Widget({ style_class: 'cc-ring', layout_manager: new Clutter.BinLayout() });
     let area = new St.DrawingArea({ style_class: 'cc-ring-area' });
     let ic = icon(iconName, 'cc-ring-icon');
+    let bolt = new St.DrawingArea({ style_class: 'cc-ring-area' });   // raio, por cima do ícone
     ring.add_child(area);
     ring.add_child(ic);
+    ring.add_child(bolt);
     let lm = ring.layout_manager;   // alinhamento próprio do BinLayout desta versão do Clutter
-    lm.child_set_property(ring, area, 'x-align', Clutter.BinAlignment.FILL);
-    lm.child_set_property(ring, area, 'y-align', Clutter.BinAlignment.FILL);
+    for (let layer of [area, bolt]) {
+        lm.child_set_property(ring, layer, 'x-align', Clutter.BinAlignment.FILL);
+        lm.child_set_property(ring, layer, 'y-align', Clutter.BinAlignment.FILL);
+    }
     lm.child_set_property(ring, ic, 'x-align', Clutter.BinAlignment.CENTER);
     lm.child_set_property(ring, ic, 'y-align', Clutter.BinAlignment.CENTER);
 
@@ -241,6 +245,23 @@ function batteryItem(iconName, name) {
         cr.$dispose();
     });
 
+    // ...e desenha numa camada própria, na frente do ícone (que fica esmaecido ao carregar)
+    bolt.connect('repaint', () => {
+        let cr = bolt.get_context();
+        if (state.charging) {
+            let [w, h] = bolt.get_surface_size();
+            let size = Math.min(w, h) * 0.62;
+            let x0 = w / 2 - size / 2, y0 = h / 2 - size / 2;
+            const pts = [[0.62, 0], [0.18, 0.57], [0.47, 0.57], [0.38, 1], [0.82, 0.43], [0.53, 0.43]];
+            cr.moveTo(x0 + pts[0][0] * size, y0 + pts[0][1] * size);
+            for (let [px, py] of pts.slice(1)) cr.lineTo(x0 + px * size, y0 + py * size);
+            cr.closePath();
+            Clutter.cairo_set_source_color(cr, bolt.get_theme_node().get_color('-cc-ring-bolt'));
+            cr.fill();
+        }
+        cr.$dispose();
+    });
+
     return {
         actor: box,
         set(level, charging) {
@@ -248,7 +269,9 @@ function batteryItem(iconName, name) {
             state.charging = !!charging && state.level !== null;
             tooltip.set_text(state.level === null ? `${name} desligado ou fora de alcance`
                 : `${name}: ${Math.round(state.level)}%${state.charging ? ' · carregando' : ''}`);
+            ic.opacity = state.charging ? 70 : 255;
             area.queue_repaint();
+            bolt.queue_repaint();
         }
     };
 }
