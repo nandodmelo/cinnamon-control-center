@@ -1,0 +1,13 @@
+{
+    "scale": {
+        "type": "scale",
+        "default": 100,
+        "min": 70,
+        "max": 160,
+        "step": 5,
+        "units": "%",
+        "digits": 0,
+        "description": "Tamanho da Central de Controle",
+        "tooltip": "Também dá para arrastar o canto inferior esquerdo da Central (duplo clique volta a 100%)"
+    }
+}

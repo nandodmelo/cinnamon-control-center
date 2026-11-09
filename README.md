@@ -18,6 +18,12 @@ Applet para o painel do **Linux Mint / Cinnamon** inspirado no Control Center do
 
 O visual segue automaticamente o tema claro/escuro.
 
+### Tamanho
+
+Arraste a alça no **canto inferior esquerdo** da Central para deixá-la maior ou menor (70%–160%);
+duplo clique na alça volta a 100%. O tamanho fica salvo e também pode ser ajustado em
+botão direito no ícone → **Configurar**.
+
 ## Instalação
 
 ```bash

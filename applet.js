@@ -10,6 +10,10 @@ const GLib = imports.gi.GLib;
 const Cvc = imports.gi.Cvc;
 const NM = imports.gi.NM;
 const Pango = imports.gi.Pango;
+const Settings = imports.ui.settings;
+const Cinnamon = imports.gi.Cinnamon;
+
+const SCALE_MIN = 70, SCALE_MAX = 160;   // % do tamanho original
 
 const MPRIS_PREFIX = 'org.mpris.MediaPlayer2.';
 const SPAWN_FLAGS = Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE;
@@ -242,7 +246,14 @@ class ControlCenterApplet extends Applet.IconApplet {
         this.menuManager.addMenu(this.menu);
 
         this._buildUI();
-        this.menu.addActor(this._root);
+        this.menu.addActor(this._container);
+        // A margem da caixa interna do tema não escala; a nossa (em .cc-scale) escala
+        this.menu.box.set_style('padding: 0;');
+
+        // Tamanho (%), salvo nas configurações do applet; ajustável arrastando o canto
+        this.settings = new Settings.AppletSettings(this, metadata.uuid, instanceId);
+        this.settings.bind('scale', '_scalePct', () => this._applyScale());
+        this._applyScale();
         this.menu.connect('open-state-changed', (m, open) => { if (open) this._onOpen(); });
 
         this._initSettings();
@@ -259,7 +270,11 @@ class ControlCenterApplet extends Applet.IconApplet {
 
     /* ---------------- UI ---------------- */
     _buildUI() {
+        // Contêiner: guarda a fonte-base (escala) e sobrepõe a alça de redimensionar ao conteúdo
+        this._container = new St.Widget({ style_class: 'cc-scale', layout_manager: new Clutter.BinLayout() });
         this._root = new St.BoxLayout({ vertical: true, style_class: 'cc-root' });
+        this._container.add_child(this._root);
+        this._buildGrip();
 
         // Linha de cima: conectividade | (Não Perturbe + 2 quadrados)
         let top = new St.BoxLayout({ style_class: 'cc-grid' });
@@ -345,6 +360,83 @@ class ControlCenterApplet extends Applet.IconApplet {
         media.add(this._mediaInfo, { expand: true, x_fill: true, y_fill: false, y_align: St.Align.MIDDLE });
         media.add(ctrls, { y_fill: false, y_align: St.Align.MIDDLE });
         this._root.add_child(media);
+    }
+
+    /* ---------------- Tamanho (escala) e alça de redimensionar ---------------- */
+    _applyScale(pct) {
+        if (pct === undefined) pct = this._scalePct || 100;
+        pct = Math.max(SCALE_MIN, Math.min(SCALE_MAX, Math.round(pct)));
+        this._livePct = pct;
+        let s = pct / 100;
+        this._container.set_style(`font-size: ${(10 * s).toFixed(2)}px;`);
+        if (this._grip) this._grip.queue_repaint();
+    }
+
+    _buildGrip() {
+        // Camada por cima do conteúdo com a alça no canto inferior esquerdo
+        let overlay = new St.BoxLayout({ vertical: true, x_expand: true, y_expand: true });
+        overlay.add(new St.Widget(), { expand: true });
+        let row = new St.BoxLayout();
+        this._grip = new St.DrawingArea({ style_class: 'cc-grip', reactive: true, track_hover: true });
+        row.add(this._grip, { x_fill: false, y_fill: false });
+        overlay.add(row, { x_fill: true, y_fill: false });
+        this._container.add_child(overlay);
+        // O BinLayout desta versão do Clutter usa alinhamento próprio: a camada ocupa todo o contêiner
+        let lm = this._container.layout_manager;
+        lm.child_set_property(this._container, overlay, 'x-align', Clutter.BinAlignment.FILL);
+        lm.child_set_property(this._container, overlay, 'y-align', Clutter.BinAlignment.FILL);
+
+        this._grip.connect('repaint', () => this._paintGrip());
+        this._grip.connect('enter-event', () => global.set_cursor(Cinnamon.Cursor.RESIZE_BOTTOM_LEFT));
+        this._grip.connect('leave-event', () => { if (!this._resizing) global.unset_cursor(); });
+        this._grip.connect('button-press-event', (a, e) => this._startResize(e));
+    }
+
+    _paintGrip() {
+        let cr = this._grip.get_context();
+        let [w, h] = this._grip.get_surface_size();
+        Clutter.cairo_set_source_color(cr, this._grip.get_theme_node().get_color('-cc-grip-color'));
+        cr.setLineWidth(Math.max(1, w / 12));
+        cr.setLineCap(1);   // ROUND
+        for (let k of [0.3, 0.62]) {   // linhas diagonais encostadas no canto inferior esquerdo
+            cr.moveTo(w * 0.12, h * k);
+            cr.lineTo(w * (1.0 - k), h * 0.88);
+        }
+        cr.stroke();
+        cr.$dispose();
+    }
+
+    _startResize(event) {
+        if (event.get_button() !== 1) return Clutter.EVENT_PROPAGATE;
+        if (event.get_click_count() === 2) {          // duplo clique: volta a 100%
+            this.settings.setValue('scale', 100);   // setValue do próprio applet não chama o callback
+            this._applyScale(100);
+            return Clutter.EVENT_STOP;
+        }
+        this._resizing = true;
+        [this._rx, this._ry] = event.get_coords();
+        this._rPct = this._livePct;
+        this._rW = this._root.width;
+        this._rH = this._root.height;
+        this._rDevice = event.get_device();
+        this._rDevice.grab(this._grip);
+        this._rMotion = this._grip.connect('motion-event', (a, e) => {
+            let [x, y] = e.get_coords();
+            // canto inferior esquerdo: arrastar para a esquerda/baixo aumenta
+            let ratio = ((this._rW - (x - this._rx)) / this._rW + (this._rH + (y - this._ry)) / this._rH) / 2;
+            this._applyScale(this._rPct * ratio);
+            return Clutter.EVENT_STOP;
+        });
+        this._rRelease = this._grip.connect('button-release-event', () => {
+            this._grip.disconnect(this._rMotion);
+            this._grip.disconnect(this._rRelease);
+            this._rDevice.ungrab();
+            this._resizing = false;
+            global.unset_cursor();
+            this.settings.setValue('scale', this._livePct);
+            return Clutter.EVENT_STOP;
+        });
+        return Clutter.EVENT_STOP;
     }
 
     _launch(argv) {
@@ -555,8 +647,8 @@ class ControlCenterApplet extends Applet.IconApplet {
 
         let dark = this._isDark();
         this._darkTile.setActive(dark);
-        if (dark) this._root.remove_style_class_name('cc-light');
-        else this._root.add_style_class_name('cc-light');
+        if (dark) this._container.remove_style_class_name('cc-light');
+        else this._container.add_style_class_name('cc-light');
         if (this.menu.actor) {
             if (dark) this.menu.actor.remove_style_class_name('cc-menu-light');
             else this.menu.actor.add_style_class_name('cc-menu-light');
