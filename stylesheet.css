@@ -21,8 +21,9 @@
     box-shadow: none;
 }
 
-.cc-scale { font-size: 10px; padding: 0.6em; }   /* margem interna: escala junto */
-.cc-root { width: 32em; spacing: 1em; }
+.cc-scale { font-size: 10px; }
+/* A margem até os cartões é do .cc-root (escala junto); a alça de redimensionar mora nela */
+.cc-root { width: 32em; spacing: 1em; padding: 1em; }
 .cc-grid { spacing: 1em; }
 .cc-col  { spacing: 1em; }
 
@@ -196,10 +197,29 @@
 
 /* Alça de redimensionar (canto inferior esquerdo) */
 .cc-grip {
-    width: 1.4em;
-    height: 1.4em;
+    width: 1.8em;
+    height: 1.8em;
     -cc-grip-color: rgba(235, 235, 245, 0.35);
 }
 .cc-grip:hover { -cc-grip-color: rgba(235, 235, 245, 0.75); }
 .cc-light .cc-grip { -cc-grip-color: rgba(60, 60, 67, 0.35); }
 .cc-light .cc-grip:hover { -cc-grip-color: rgba(60, 60, 67, 0.75); }
+
+/* Baterias (mouse e fone) */
+.cc-card.cc-batteries { spacing: 0.4em; padding: 0.7em 1em; }   /* altura total igual à de antes */
+.cc-bat  { spacing: 0.6em; }
+.cc-bat .cc-ring { width: 3.4em; height: 3.4em; }
+.cc-ring-area {
+    -cc-ring-track: rgba(255, 255, 255, 0.16);
+    -cc-ring-ok:  #30d158;
+    -cc-ring-mid: #ff9f0a;
+    -cc-ring-low: #ff453a;
+}
+.cc-light .cc-ring-area {
+    -cc-ring-track: rgba(0, 0, 0, 0.1);
+    -cc-ring-ok:  #28cd41;
+    -cc-ring-mid: #ff9500;
+    -cc-ring-low: #ff3b30;
+}
+.cc-ring-icon { icon-size: 1.8em; color: #f2f2f7; }
+.cc-light .cc-ring-icon { color: #3a3a3c; }

@@ -11,6 +11,7 @@ const Cvc = imports.gi.Cvc;
 const NM = imports.gi.NM;
 const Pango = imports.gi.Pango;
 const Settings = imports.ui.settings;
+const Tooltips = imports.ui.tooltips;
 const Cinnamon = imports.gi.Cinnamon;
 
 const SCALE_MIN = 70, SCALE_MAX = 160;   // % do tamanho original
@@ -200,6 +201,58 @@ function smallTile(iconName, title, onClick) {
     return tile;
 }
 
+/* Bateria de um aparelho: anel com o ícone no centro; a porcentagem aparece ao passar o mouse */
+function batteryItem(iconName, name) {
+    let box = new St.BoxLayout({ style_class: 'cc-bat', reactive: true, track_hover: true });
+    let ring = new St.Widget({ style_class: 'cc-ring', layout_manager: new Clutter.BinLayout() });
+    let area = new St.DrawingArea({ style_class: 'cc-ring-area' });
+    let ic = icon(iconName, 'cc-ring-icon');
+    ring.add_child(area);
+    ring.add_child(ic);
+    let lm = ring.layout_manager;   // alinhamento próprio do BinLayout desta versão do Clutter
+    lm.child_set_property(ring, area, 'x-align', Clutter.BinAlignment.FILL);
+    lm.child_set_property(ring, area, 'y-align', Clutter.BinAlignment.FILL);
+    lm.child_set_property(ring, ic, 'x-align', Clutter.BinAlignment.CENTER);
+    lm.child_set_property(ring, ic, 'y-align', Clutter.BinAlignment.CENTER);
+
+    box.add(ring, { x_fill: false, y_fill: false, y_align: St.Align.MIDDLE });
+    let tooltip = new Tooltips.Tooltip(box, `${name}: verificando…`);
+
+    let state = { level: null, charging: false };
+    area.connect('repaint', () => {
+        let cr = area.get_context();
+        let node = area.get_theme_node();
+        let [w, h] = area.get_surface_size();
+        let lw = Math.max(2, w * 0.1);
+        let r = Math.min(w, h) / 2 - lw / 2;
+        cr.setLineWidth(lw);
+        Clutter.cairo_set_source_color(cr, node.get_color('-cc-ring-track'));
+        cr.arc(w / 2, h / 2, r, 0, 2 * Math.PI);
+        cr.stroke();
+        if (state.level !== null) {
+            let key = state.charging ? '-cc-ring-ok' : state.level <= 10 ? '-cc-ring-low'
+                : state.level <= 20 ? '-cc-ring-mid' : '-cc-ring-ok';
+            Clutter.cairo_set_source_color(cr, node.get_color(key));
+            cr.setLineCap(1);   // ROUND
+            let start = -Math.PI / 2;   // começa no topo, sentido horário
+            cr.arc(w / 2, h / 2, r, start, start + 2 * Math.PI * Math.max(0.02, state.level / 100));
+            cr.stroke();
+        }
+        cr.$dispose();
+    });
+
+    return {
+        actor: box,
+        set(level, charging) {
+            state.level = (level === null || level === undefined || isNaN(level)) ? null : Math.max(0, Math.min(100, level));
+            state.charging = !!charging && state.level !== null;
+            tooltip.set_text(state.level === null ? `${name} desligado ou fora de alcance`
+                : `${name}: ${Math.round(state.level)}%${state.charging ? ' · carregando' : ''}`);
+            area.queue_repaint();
+        }
+    };
+}
+
 /* Cabeçalho de cartão: título clicável (com seta) + ícone de atalho à direita */
 function cardHeader(text, iconName, onIconClick, onTitleClick) {
     let row = new St.BoxLayout({ style_class: 'cc-card-header' });
@@ -254,7 +307,19 @@ class ControlCenterApplet extends Applet.IconApplet {
         this.settings = new Settings.AppletSettings(this, metadata.uuid, instanceId);
         this.settings.bind('scale', '_scalePct', () => this._applyScale());
         this._applyScale();
-        this.menu.connect('open-state-changed', (m, open) => { if (open) this._onOpen(); });
+        // Ajusta a moldura no mesmo passo em que o Cinnamon prepara o menu, antes de calcular a
+        // posição; assim a Central já abre no tamanho final e não "pula" depois de aparecer.
+        const origSetMaxHeight = this.menu.setMaxHeight.bind(this.menu);
+        this.menu.setMaxHeight = (...args) => { origSetMaxHeight(...args); this._fitFrame(); };
+        this.menu.connect('open-state-changed', (m, open) => {
+            if (open) { this._onOpen(); return; }
+            this._stopBatteryPolling();
+            // Fecha as seções expandidas depois da animação de fechar, nunca na abertura
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 400, () => {
+                if (!this.menu.isOpen) this._collapse();
+                return GLib.SOURCE_REMOVE;
+            });
+        });
 
         this._initSettings();
         this._initNetwork();
@@ -262,6 +327,7 @@ class ControlCenterApplet extends Applet.IconApplet {
         this._initSound();
         this._initMpris();
         this._initBrightness();
+        this._refreshBatteries();
     }
 
     _connect(obj, sig, fn) {
@@ -293,10 +359,13 @@ class ControlCenterApplet extends Applet.IconApplet {
         top.add_child(net);
 
         let right = new St.BoxLayout({ vertical: true, style_class: 'cc-col', x_expand: true });
-        let dndCard = new St.BoxLayout({ style_class: 'cc-card cc-dnd' });
-        this._dndRow = toggleRow('weather-clear-night-symbolic', 'Não Perturbe', () => this._toggleDnd(), null, true);
-        dndCard.add(this._dndRow.actor, { expand: true, x_fill: true });
-        right.add_child(dndCard);
+        // Baterias dos aparelhos sem fio (mouse via OpenRazer, fone via HeadsetControl)
+        let batCard = new St.BoxLayout({ style_class: 'cc-card cc-batteries' });
+        this._batMouse = batteryItem('input-mouse-symbolic', 'Mouse');
+        this._batHeadset = batteryItem('audio-headset-symbolic', 'Fone');
+        batCard.add(this._batMouse.actor, { expand: true, x_fill: false, x_align: St.Align.MIDDLE });
+        batCard.add(this._batHeadset.actor, { expand: true, x_fill: false, x_align: St.Align.MIDDLE });
+        right.add(batCard, { x_fill: true });
 
         let smalls = new St.BoxLayout({ style_class: 'cc-grid', x_expand: true });
         this._nightTile = smallTile('night-light-symbolic', 'Luz\nNoturna', () => this._toggleNightLight());
@@ -372,6 +441,15 @@ class ControlCenterApplet extends Applet.IconApplet {
         if (this._grip) this._grip.queue_repaint();
     }
 
+    // O WhiteSur desenha a moldura com uma imagem de borda que tem uma faixa de sombra
+    // transparente (menu.svg: moldura visível a 7px dos lados, 6px em cima, 10px embaixo).
+    // A margem do tema vira só essa faixa; a margem até os cartões é nossa (.cc-root) e escala.
+    _fitFrame() {
+        if (!this._shellTheme || !/^WhiteSur/i.test(this._shellTheme.get_string('name'))) return;
+        let st = this.menu.actor.style || '';   // o Cinnamon redefine este estilo a cada abertura
+        if (!st.includes('padding')) this.menu.actor.style = st + ' padding: 6px 7px 10px 7px;';
+    }
+
     _buildGrip() {
         // Camada por cima do conteúdo com a alça no canto inferior esquerdo
         let overlay = new St.BoxLayout({ vertical: true, x_expand: true, y_expand: true });
@@ -394,13 +472,16 @@ class ControlCenterApplet extends Applet.IconApplet {
 
     _paintGrip() {
         let cr = this._grip.get_context();
-        let [w, h] = this._grip.get_surface_size();
+        let [, h] = this._grip.get_surface_size();
+        // c = largura da margem (canto livre entre a moldura e os cartões)
+        let c = this._root.get_theme_node().get_padding(St.Side.LEFT) || h / 2;
         Clutter.cairo_set_source_color(cr, this._grip.get_theme_node().get_color('-cc-grip-color'));
-        cr.setLineWidth(Math.max(1, w / 12));
+        cr.setLineWidth(Math.max(1, c / 7));
         cr.setLineCap(1);   // ROUND
-        for (let k of [0.3, 0.62]) {   // linhas diagonais encostadas no canto inferior esquerdo
-            cr.moveTo(w * 0.12, h * k);
-            cr.lineTo(w * (1.0 - k), h * 0.88);
+        // Linhas paralelas à curva do canto: pontos com x + (h - y) = d; d < 2c nunca invade os cartões
+        for (let d of [c * 1.0, c * 1.5]) {
+            cr.moveTo(d * 0.2, h - d * 0.8);
+            cr.lineTo(d * 0.8, h - d * 0.2);
         }
         cr.stroke();
         cr.$dispose();
@@ -439,6 +520,62 @@ class ControlCenterApplet extends Applet.IconApplet {
         return Clutter.EVENT_STOP;
     }
 
+    /* ---------------- Baterias ---------------- */
+    _startBatteryPolling() {
+        this._refreshBatteries();
+        this._stopBatteryPolling();
+        this._batTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 30, () => {
+            this._refreshBatteries();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _stopBatteryPolling() {
+        if (this._batTimer) { GLib.source_remove(this._batTimer); this._batTimer = 0; }
+    }
+
+    _refreshBatteries() {
+        // Mouse: daemon do OpenRazer (D-Bus da sessão)
+        const razer = (path, iface, method, cb) => Gio.DBus.session.call('org.razer', path, iface, method,
+            null, null, Gio.DBusCallFlags.NONE, 3000, null, (c, res) => {
+                let v = null;
+                try { v = c.call_finish(res).deepUnpack()[0]; } catch (e) { }
+                cb(v);
+            });
+        razer('/org/razer', 'razer.devices', 'getDevices', (serials) => {
+            if (!serials || !serials.length) return this._batMouse.set(null);
+            let left = serials.length, found = false;
+            for (let s of serials) {
+                let path = `/org/razer/device/${s}`;
+                razer(path, 'razer.device.misc', 'getDeviceType', (type) => {
+                    left--;
+                    if (type === 'mouse' && !found) {
+                        found = true;
+                        razer(path, 'razer.device.power', 'getBattery', (lvl) =>
+                            razer(path, 'razer.device.power', 'isCharging', (chg) => this._batMouse.set(lvl, chg)));
+                    } else if (!left && !found) {
+                        this._batMouse.set(null);
+                    }
+                });
+            }
+        });
+
+        // Fone: HeadsetControl (com limite de tempo, caso o receptor não responda)
+        if (this._hcPath === undefined) this._hcPath = GLib.find_program_in_path('headsetcontrol');
+        if (!this._hcPath) return this._batHeadset.set(null);
+        run(['timeout', '6', this._hcPath, '-b', '-o', 'json'], (ok, out) => {
+            try {
+                let dev = (JSON.parse(out).devices || [])[0];
+                let b = dev && dev.battery;
+                if (!b || b.level < 0 || !['BATTERY_AVAILABLE', 'BATTERY_CHARGING'].includes(b.status))
+                    return this._batHeadset.set(null);
+                this._batHeadset.set(b.level, b.status === 'BATTERY_CHARGING');
+            } catch (e) {
+                this._batHeadset.set(null);
+            }
+        });
+    }
+
     _launch(argv) {
         this.menu.close();
         Util.spawn(argv);
@@ -449,7 +586,7 @@ class ControlCenterApplet extends Applet.IconApplet {
     }
 
     _onOpen() {
-        this._collapse();
+        this._startBatteryPolling();
         this._refreshBrightness();
         this._refreshBluetooth();
     }
@@ -619,15 +756,13 @@ class ControlCenterApplet extends Applet.IconApplet {
             null, null, Gio.DBusCallFlags.NONE, -1, null, null);
     }
 
-    /* ------------- GSettings: Não Perturbe, Luz Noturna, Modo Escuro ------------- */
+    /* ------------- GSettings: Luz Noturna, Modo Escuro ------------- */
     _initSettings() {
-        this._notif = new Gio.Settings({ schema_id: 'org.cinnamon.desktop.notifications' });
         this._color = new Gio.Settings({ schema_id: 'org.cinnamon.settings-daemon.plugins.color' });
         this._iface = new Gio.Settings({ schema_id: 'org.cinnamon.desktop.interface' });
         this._shellTheme = new Gio.Settings({ schema_id: 'org.cinnamon.theme' });
         try { this._portal = new Gio.Settings({ schema_id: 'org.x.apps.portal' }); } catch (e) { this._portal = null; }
 
-        this._connect(this._notif, 'changed::display-notifications', () => this._updateSettings());
         this._connect(this._color, 'changed::night-light-enabled', () => this._updateSettings());
         this._connect(this._iface, 'changed::gtk-theme', () => this._updateSettings());
         this._updateSettings();
@@ -638,11 +773,6 @@ class ControlCenterApplet extends Applet.IconApplet {
     }
 
     _updateSettings() {
-        let dnd = !this._notif.get_boolean('display-notifications');
-        this._dndRow.button.setActive(dnd);
-        this._dndRow.subtitle.text = dnd ? 'Ativado' : '';
-        this._dndRow.subtitle.visible = dnd;
-
         this._nightTile.setActive(this._color.get_boolean('night-light-enabled'));
 
         let dark = this._isDark();
@@ -653,10 +783,6 @@ class ControlCenterApplet extends Applet.IconApplet {
             if (dark) this.menu.actor.remove_style_class_name('cc-menu-light');
             else this.menu.actor.add_style_class_name('cc-menu-light');
         }
-    }
-
-    _toggleDnd() {
-        this._notif.set_boolean('display-notifications', !this._notif.get_boolean('display-notifications'));
     }
 
     _toggleNightLight() {
@@ -1008,6 +1134,7 @@ class ControlCenterApplet extends Applet.IconApplet {
 
     /* ---------------- Limpeza ---------------- */
     on_applet_removed_from_panel() {
+        this._stopBatteryPolling();
         this._signals.forEach(([o, id]) => { try { o.disconnect(id); } catch (e) { } });
         this._dbusSubs.forEach(([c, id]) => c.signal_unsubscribe(id));
         for (let p of this._players.values()) p.proxy.disconnect(p.id);
