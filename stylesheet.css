@@ -128,10 +128,16 @@
 .cc-light .cc-list-title { color: #1d1d1f; }
 
 .cc-display-block { spacing: 3px; padding: 2px 0 6px 0; }
-.cc-pills { spacing: 6px; padding-top: 6px; }
+.cc-section-label {
+    font-size: 7.5pt;
+    padding-top: 8px;
+    color: rgba(235, 235, 245, 0.5);
+}
+.cc-light .cc-section-label { color: rgba(60, 60, 67, 0.55); }
+.cc-pills { spacing: 6px; padding-top: 4px; }
 .cc-pill {
     font-size: 8.5pt;
-    padding: 4px 10px;
+    padding: 4px 9px;
     border-radius: 11px;
     color: #f2f2f7;
     background-color: rgba(255, 255, 255, 0.12);

@@ -430,7 +430,7 @@ class ControlCenterApplet extends Applet.IconApplet {
             return;
         }
         let [, monitors, logicals] = this._displayState;
-        for (let lm of logicals) {
+        for (let [lmIndex, lm] of logicals.entries()) {
             for (let spec of lm[5]) {
                 let mon = monitors.find(m => m[0][0] === spec[0]);
                 if (!mon) continue;
@@ -444,10 +444,25 @@ class ControlCenterApplet extends Applet.IconApplet {
                 for (let [r, mode] of this._rateOptions(mon[1], current)) {
                     let p = new St.Button({ style_class: 'cc-pill', label: `${r} Hz` });
                     if (mode === current) p.add_style_pseudo_class('checked');
-                    else p.connect('clicked', () => this._applyMode(spec[0], mode[0]));
+                    else p.connect('clicked', () => this._applyDisplay({ connector: spec[0], modeId: mode[0] }));
                     pills.add_child(p);
                 }
+                block.add_child(label('Taxa de atualização', 'cc-section-label'));
                 block.add_child(pills);
+
+                // Escala: só a primeira tela de cada monitor lógico mostra (a escala é do monitor lógico)
+                let scales = this._scaleOptions(current[5], lm[2]);
+                if (spec === lm[5][0] && scales.length > 1) {
+                    let sp = new St.BoxLayout({ style_class: 'cc-pills' });
+                    for (let s of scales) {
+                        let p = new St.Button({ style_class: 'cc-pill', label: `${Math.round(s * 100)}%` });
+                        if (Math.abs(s - lm[2]) < 0.01) p.add_style_pseudo_class('checked');
+                        else p.connect('clicked', () => this._applyDisplay({ lmIndex, scale: s }));
+                        sp.add_child(p);
+                    }
+                    block.add_child(label('Escala', 'cc-section-label'));
+                    block.add_child(sp);
+                }
                 this._displaysBox.add_child(block);
             }
         }
@@ -455,20 +470,32 @@ class ControlCenterApplet extends Applet.IconApplet {
             this._displaysBox.add_child(label('Nenhum monitor ativo encontrado.', 'cc-hint'));
     }
 
-    _applyMode(connector, modeId) {
+    // Escalas de 100% a 200% suportadas pelo modo atual (o Muffin oferece valores como 1.7518 para "175%")
+    _scaleOptions(supported, current) {
+        let out = supported.filter(s => s >= 0.99 && s <= 2.01);
+        if (!out.some(s => Math.abs(s - current) < 0.01)) out.push(current);
+        return out.sort((a, b) => a - b);
+    }
+
+    // change = { connector, modeId } para trocar a taxa, ou { lmIndex, scale } para trocar a escala
+    _applyDisplay(change) {
         let [serial, monitors, logicals, props] = this._displayState;
         let curMode = (conn) => {
             let mon = monitors.find(m => m[0][0] === conn);
             let cur = mon && mon[1].find(m => m[6]['is-current']);
             return cur ? cur[0] : '';
         };
-        let lms = logicals.map(lm => [lm[0], lm[1], lm[2], lm[3], lm[4],
-            lm[5].map(spec => [spec[0], spec[0] === connector ? modeId : curMode(spec[0]), {}])]);
+        let lms = logicals.map((lm, i) => [lm[0], lm[1], i === change.lmIndex ? change.scale : lm[2], lm[3], lm[4],
+            lm[5].map(spec => [spec[0], spec[0] === change.connector ? change.modeId : curMode(spec[0]), {}])]);
         let p = {};
         if (props['supports-changing-layout-mode'] && props['layout-mode'] !== undefined)
             p['layout-mode'] = new GLib.Variant('u', props['layout-mode']);
-        if (props['legacy-ui-scaling-factor'] !== undefined)
-            p['legacy-ui-scaling-factor'] = new GLib.Variant('i', props['legacy-ui-scaling-factor']);
+        if (props['legacy-ui-scaling-factor'] !== undefined) {
+            // Com escala fracionária no X11 a interface é desenhada no inteiro acima e reduzida (1,25 → 2)
+            let ui = change.scale === undefined ? props['legacy-ui-scaling-factor']
+                : Math.max(1, Math.ceil(Math.max(...lms.map(l => l[2])) - 0.01));
+            p['legacy-ui-scaling-factor'] = new GLib.Variant('i', ui);
+        }
         // método 2 = persistente; o Cinnamon pede confirmação e reverte sozinho se não for confirmada
         let params = new GLib.Variant('(uua(iiduba(ssa{sv}))a{sv})', [serial, 2, lms, p]);
         this.menu.close();
